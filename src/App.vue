@@ -1,22 +1,83 @@
+<script setup>
+  import {ref,reactive,watch} from 'vue'
+  const list = reactive( JSON.parse(localStorage.getItem('list') || '[]'))
+  const form = reactive({
+    date:'',
+    title:''
+  })
+
+  const select = ref(-1)
+  //提交功能，点击提交按钮，将表单中的数据添加到数组中
+  const commit = () => {
+    //判断表单内容是否为空,如果为空，不添加，并弹出对话框“请输入标题和日期”
+    if(form.date === '' || form.title === ''){
+      alert('请输入标题和日期')
+      return
+    }
+   else if(select.value === -1){
+      list.push({
+        id:Date.now(),
+        date:form.date,
+        title:form.title
+      })
+    }else{
+      list[select.value].date = form.date
+      list[select.value].title = form.title
+    }
+    select.value = -1
+    form.date = ''
+    form.title = ''
+  }
+  //编辑功能,点击编辑按钮，将当前行的标题和日期显示在表单中
+  const edit = (index, title, date) => {
+    select.value = index
+    form.title = title
+    form.date = date
+    select.value = index
+  }
+  //删除功能，点击删除按钮，将当前行的数据从数组中删除
+  const delItem = (id) => {
+    const index = list.findIndex(item => item.id === id)
+    list.splice(index,1)
+  }
+  //监听list的变化，当list发生变化时，将list存储到localStorage中
+  watch(list,()=>{
+    localStorage.setItem('list',JSON.stringify(list))
+  })
+
+// 拖拽功能
+const handleDragStart = (e, key) => {
+  e.dataTransfer.setData('key', key)
+}
+const handleDragOver = (e, key) => {
+  e.preventDefault()
+}
+const handleDrop = (e, key) => {
+  const fromKey = e.dataTransfer.getData('key')
+  const fromItem = list[fromKey]
+  const toItem = list[key]
+  list.splice(fromKey, 1, toItem)
+  list.splice(key, 1, fromItem)
+}
+
+
+</script>
+
 <template>
-  <h2>
-    {{ msg }}
-  </h2>
-  <hr>
-
-  
-<form onsubmit="return false" ref="myForm">
-  <div>
-    标题: <input type="text" placeholder="请输入代办标题" v-model="title" >
-    日期: <input type="date" v-model="date">
-  </div>
-  <button @click="commit(id)">提交</button><br>
-  <button @click="add">添加</button>
-</form>
-
-
-
-  <!--建一个表格，表头依次是标题，日期，操作，单元格之间存在边框 -->
+  <!-- 设计一个表格，表头具有标题，日期，操作，其中操作单元格内包含编辑和删除两个按钮 -->
+    <form onsubmit="return false">
+      <h3>{{ select===-1?'添加':`编辑:${form.title}` }}</h3>
+      <div>
+        标题: <input type="text" placeholder="请输入代办标题" v-model="form.title" >
+        日期: <input type="date" v-model="form.date">
+      </div>
+      <div style="margin:10px 0 ;">
+        <button @click="commit()">提交</button>
+      <button @click="selected = -1; form.title = ''; form.date = ''">添加</button>
+      </div>
+ 
+    </form>
+    <!--建一个表格，表头依次是标题，日期，操作，单元格之间存在边框 -->
     <table border="1" >
       <tr style="display:fixed ;">
         <th>标题</th>
@@ -24,154 +85,24 @@
         <th>操作</th>
       </tr>
       <!-- 用v-for循环遍历数组，每个数组元素都是一个对象，对象中有title和date两个属性 -->
-      <tr v-for="item in list " :key="item.id" >
+      <tr v-for=" ( item,index) in list " :key="item.id" draggable="true" @dragstart="handleDragStart($event, index)" @dragover="handleDragOver($event,index)" @drop="handleDrop($event, index)">
         <!-- 用v-bind绑定title和date属性 -->
         <td>{{ item.title }}</td>
         <td>{{ item.date }}</td>
         <!-- 用v-on绑定点击事件，点击删除按钮时，调用deleteItem方法 -->
-        <td><button @click="edit(item.id)" >编辑</button>
+        <td><button @click="edit(index, item.title, item.date)" >编辑</button>
           <button @click="delItem(item.id)">删除</button>
         </td>
       </tr>
-
-      <!-- 虚拟列表 -->
-
-      <div class="container"  
-      style="overflow-y: auto;
-      height:300px;"   @scroll="onScroll">
- <div class="content" :style="{height:arr.length * 30 + 'px'}">
-      <div class="placeholder" :style="{height:indexCurrent  * 30 + 'px'}"></div>
-        <tr v-for="item in newArr " :key="item" style="height:30px ;">
-        <!-- 用v-bind绑定title和date属性 -->
-        <td>{{ item }}</td>
-        <td>{{ item}}</td>
-        <!-- 用v-on绑定点击事件，点击删除按钮时，调用deleteItem方法 -->
-
-      </tr>
-    </div>
-    </div>
     </table>
+</template>
 
-  </template>
-  
-  <script>
-  export default {
- 
-    data(){
-      return {
-        title: '',
-        date: '',
-        id: 0 ,
-        list: [],
-        status: false,
-        indexCurrent:''
-      }
-    },
-    created(){
-      //一开始创建一个数组，从1到1000
-         this.arr = Array.from({length: 1000}, (v, k) => k + 1)
-
-
-
-      //从本地储存中获取id数据，如果存在id，则使用数组中最后一位元素的id，如果不存在id，则使用0
-
-      if(localStorage.getItem('list')){
-      const length = JSON.parse(localStorage.getItem('list')).length
-      console.log(length)
-      this.id = JSON.parse(localStorage.getItem('list'))[length - 1].id + 1
-      }
-     else{
-       this.id = 0
-     }
-    },
-    mounted(){
-      // 从本地存储中获取数据
-      let list = localStorage.getItem('list')
-      // 如果本地存储中有数据，就把数据赋值给list
-      if(list){
-        this.list = JSON.parse(list)
-      }
-    },
-    methods:{
-      
-      // 监听表格的滚动事件，获取当前滚动的位置
-      onScroll(e){
-        console.log(e)
-        const scrollTop = e.target.scrollTop
-        console.log(scrollTop)
-        // 通过scrollTop计算当前滚动到第几个元素
-       this.indexCurrent = Math.floor(scrollTop / 30)
-        //q:如何在标签中的style使用绑定indexCurrent的值
-        //a:使用v-bind:style="height:{{indexCurrent}} * 30 +'px'"
-
-      },
-
-
-      commit(id){
-         //如果title和date任一为空，结束运行
-         if(!this.title || !this.date){
-          //清空表单
-          alert('请按要求填写表单')
-          return
-        }
-        this.list[id].title = this.title
-        this.list[id].date = this.date
-        localStorage.setItem('list', JSON.stringify(this.list))
-        this.title = ''
-        this.date = '',
-        this.status = false
-      },
-      add(){
-        // 如果title和date任一为空，就不添加，并弹出弹窗信息:请输入标题和日期
-        if(!this.title || !this.date){
-          alert('请输入标题和日期')
-          return
-        }
-        this.list.push({
-          title: this.title,
-          date: this.date,
-          id: this.id++
-
-        })
-        localStorage.setItem('list', JSON.stringify(this.list))
-        // 
-        this.title = ''
-        this.date = ''
-        
-      },
-      edit(id){
-       
-        this.title = this.list.filter(item => item.id === id)[0].title
-        this.date = this.list.filter(item => item.id === id)[0].date
-        this.id = id
-        this.status = true
-      },
-      delItem(id){
-        const currentIndex = this.list.findIndex(item => item.id === id)
-        this.list.splice(currentIndex, 1)
-        localStorage.setItem('list', JSON.stringify(this.list))
-      },
-      // 
-      
-    },
-      computed:{
-        msg(){
-          return this.status ? `编辑:${this.title}` : '添加'
-        },
-        newArr(){
-          return this.arr.slice(this.indexCurrent, this.indexCurrent + 10)
-        }
-      }
-    }
-  
-  </script>
-
-  <style  scoped>
+<style scoped>
   button{
-    border-radius: 10px;
-    height: 25px;
-    font-size: 12px;
+    width: 60px;
+    height: 30px;
     background-color: #efefef;
+    font-size: 14px;
+    padding: 0px 10px;
   }
-  
 </style>
